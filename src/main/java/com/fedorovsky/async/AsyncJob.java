@@ -9,7 +9,7 @@ import java.util.function.Function;
 public class AsyncJob<T> {
 
     final BlockingQueueProcessor<T> pr;
-    private BlockingQueueProcessor.AsyncJobConfig cfg = new BlockingQueueProcessor.AsyncJobConfig(1, 100, err -> {});
+    private BlockingQueueProcessor.AsyncJobConfig cfg = new BlockingQueueProcessor.AsyncJobConfig(1, 100, null);
 
     public AsyncJob(BlockingQueueProcessor<T> pr) {
         this.pr = pr;
@@ -59,6 +59,14 @@ public class AsyncJob<T> {
         public void start() {
             this.main.start();
             super.start();
+        }
+
+        @Override
+        public AsyncJob<T> exceptionally(Consumer<Throwable> handler) {
+            if (main.cfg.onError() == null) {
+                main.cfg = new BlockingQueueProcessor.AsyncJobConfig(main.cfg.threads(), main.cfg.capacity(), handler);
+            }
+            return super.exceptionally(handler);
         }
     }
 

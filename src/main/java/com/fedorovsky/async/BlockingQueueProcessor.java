@@ -2,10 +2,8 @@ package com.fedorovsky.async;
 
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -16,7 +14,6 @@ final class BlockingQueueProcessor<T> {
     static final Object SIGNAL_END = new Object();
     BlockingQueue<T> sharedQueue;
     private final InterruptableConsumer<BlockingQueue<T>> sharedQueueConsumer;
-    private ExecutorService taskExecutor;
 
     public BlockingQueueProcessor(InterruptableConsumer<BlockingQueue<T>> sharedQueueConsumer) {
         this.sharedQueueConsumer = sharedQueueConsumer;
@@ -67,7 +64,7 @@ final class BlockingQueueProcessor<T> {
 
 
     @SuppressWarnings({"rawtypes", "unchecked"})
-    static <T> void putSignalEnd( BlockingQueue source) throws InterruptedException {
+    static <T> void putSignalEnd(BlockingQueue source) throws InterruptedException {
         source.put(SIGNAL_END);
     }
 
@@ -79,23 +76,23 @@ final class BlockingQueueProcessor<T> {
         }
     }
 
-    public BlockingQueueProcessor<T> start() {
-        return start(new AsyncJobConfig(1, 100, err -> {}));
+    public void start() {
+        start(new AsyncJobConfig(1, 100, null));
     }
 
-    public BlockingQueueProcessor<T> start(AsyncJobConfig cfg) {
-        if (taskExecutor != null) {
-            throw new IllegalArgumentException("Processor can be started only once");
+    public void start(AsyncJobConfig cfg) {
+        if (this.sharedQueue != null) {
+            throw new AsyncJobException("Processor can be started only once");
         }
         if (cfg.threads <= 0) {
-            throw new IllegalArgumentException("Must provide at least 1 thread");
+            throw new AsyncJobException("Must provide at least 1 thread");
         }
         if (cfg.capacity <= 0) {
-            throw new IllegalArgumentException("Capacity must be bigger than 0");
+            throw new AsyncJobException("Capacity must be bigger than 0");
         }
 
         this.sharedQueue = new LinkedBlockingQueue<>(cfg.capacity);
-        this.taskExecutor = Executors.newFixedThreadPool(cfg.threads);
+        var taskExecutor = Executors.newFixedThreadPool(cfg.threads);
 
         var futures = IntStream
                 .range(0, cfg.threads).boxed()
@@ -107,7 +104,9 @@ final class BlockingQueueProcessor<T> {
                 .thenAccept(x -> putSignalEndSafe(this.sharedQueue))
                 .exceptionally(x -> {
                     try {
-                        cfg.onError.accept(x);
+                        if (cfg.onError != null) {
+                            cfg.onError.accept(x);
+                        }
                     } finally {
                         putSignalEndSafe(this.sharedQueue);
                     }
@@ -115,16 +114,7 @@ final class BlockingQueueProcessor<T> {
                 });
 
 
-        this.taskExecutor.shutdown();
-
-        return this;
-    }
-
-    /**
-     * Blocks a thread until all child threads finish their job
-     **/
-    public boolean join() throws InterruptedException {
-        return this.taskExecutor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+        taskExecutor.shutdown();
     }
 
     /**
