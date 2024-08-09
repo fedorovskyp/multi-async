@@ -3,24 +3,30 @@ package com.fedorovsky.async;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 public class AsyncJob<T> {
 
     final BlockingQueueProcessor<T> pr;
-    private BlockingQueueProcessor.AsyncJobConfig cfg = new BlockingQueueProcessor.AsyncJobConfig(1, 100);
+    private BlockingQueueProcessor.AsyncJobConfig cfg = new BlockingQueueProcessor.AsyncJobConfig(1, 100, err -> {});
 
     public AsyncJob(BlockingQueueProcessor<T> pr) {
         this.pr = pr;
     }
 
     public AsyncJob<T> capacity(int capacity) {
-        cfg = new BlockingQueueProcessor.AsyncJobConfig(cfg.threads(), capacity);
+        cfg = new BlockingQueueProcessor.AsyncJobConfig(cfg.threads(), capacity, cfg.onError());
         return this;
     }
 
     public AsyncJob<T> threads(int threads) {
-        cfg = new BlockingQueueProcessor.AsyncJobConfig(threads, cfg.capacity());
+        cfg = new BlockingQueueProcessor.AsyncJobConfig(threads, cfg.capacity(), cfg.onError());
+        return this;
+    }
+
+    public AsyncJob<T> exceptionally(Consumer<Throwable> handler) {
+        cfg = new BlockingQueueProcessor.AsyncJobConfig(cfg.threads(), cfg.capacity(), handler);
         return this;
     }
 

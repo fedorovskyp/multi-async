@@ -2,6 +2,7 @@ package com.fedorovsky.async;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.Iterator;
@@ -78,5 +79,30 @@ public class AsyncJobTest {
             .consume(Function.identity());
 
         assertEquals(List.of(1, 2), out);
+    }
+
+    @Test
+    public void AsyncJobSupport_ExceptionallyDownstream() {
+        var stream = Stream.of(1, 2, 3, 4, 5);
+        var counter = new AtomicInteger();
+        var holder = new TestUtils.Holder<Throwable>(); 
+
+        var out = AsyncJobSupport.of(stream)
+            .andThen(next -> {
+                var el = counter.incrementAndGet();
+                if (el == 3) {
+                    throw new RuntimeException("Exception processing the 3rd element");
+                }
+                return next;
+            })
+            .exceptionally(ex -> {
+                holder.set(ex);
+            })
+            .consume(Function.identity());
+
+        assertEquals(List.of(1, 2), out);
+        var exception = holder.get();
+        assertNotNull(exception);
+        assertEquals("Exception processing the 3rd element", exception.getCause().getMessage());
     }
 }

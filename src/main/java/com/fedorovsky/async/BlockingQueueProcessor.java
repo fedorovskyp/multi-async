@@ -7,6 +7,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.IntStream;
 
@@ -79,7 +80,7 @@ final class BlockingQueueProcessor<T> {
     }
 
     public BlockingQueueProcessor<T> start() {
-        return start(new AsyncJobConfig(1, 100));
+        return start(new AsyncJobConfig(1, 100, err -> {}));
     }
 
     public BlockingQueueProcessor<T> start(AsyncJobConfig cfg) {
@@ -105,7 +106,11 @@ final class BlockingQueueProcessor<T> {
         CompletableFuture.allOf(futures)
                 .thenAccept(x -> putSignalEndSafe(this.sharedQueue))
                 .exceptionally(x -> {
-                    putSignalEndSafe(this.sharedQueue);
+                    try {
+                        cfg.onError.accept(x);
+                    } finally {
+                        putSignalEndSafe(this.sharedQueue);
+                    }
                     return null;
                 });
 
@@ -170,7 +175,7 @@ final class BlockingQueueProcessor<T> {
         }
     }
 
-    public static record AsyncJobConfig(int threads, int capacity) {
+    public static record AsyncJobConfig(int threads, int capacity, Consumer<Throwable> onError) {
     }
 
 }
